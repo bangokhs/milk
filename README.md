@@ -5,14 +5,143 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>(주)성화태크 | SUNGHWA TECH</title>
     <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
+    
+    <!-- Firebase SDK (v9, 모듈/자바스크립트 지원) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Firebase 설정 (본인의 Firebase 프로젝트 설정 값으로 교체해주셔야 작동합니다)
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
+
+        const ADMIN_EMAIL = "20240153@bangok.hs.kr";
+        let currentUser = null;
+
+        // Auth 상태 감지
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            const authBtn = document.getElementById('auth-btn');
+            const userDisplay = document.getElementById('user-display');
+            const productFormContainer = document.getElementById('product-form-container');
+
+            if (user) {
+                authBtn.innerText = "로그아웃";
+                userDisplay.innerText = `${user.displayName} (${user.email})`;
+                productFormContainer.style.display = "block"; // 로그인 시 등록 폼 노출
+            } else {
+                authBtn.innerText = "Google 로그인";
+                userDisplay.innerText = "";
+                productFormContainer.style.display = "none";
+            }
+            loadProducts();
+        });
+
+        // Google 로그인 / 로그아웃
+        window.toggleAuth = () => {
+            if (currentUser) {
+                signOut(auth).then(() => alert("로그아웃 되었습니다."));
+            } else {
+                signInWithPopup(auth, provider).catch((error) => console.error(error));
+            }
+        };
+
+        // 제품 등록
+        window.addProduct = async (e) => {
+            e.preventDefault();
+            if (!currentUser) {
+                alert("로그인이 필요합니다.");
+                return;
+            }
+
+            const name = document.getElementById('product-name').value;
+            const desc = document.getElementById('product-desc').value;
+            const price = document.getElementById('product-price').value;
+
+            try {
+                await addDoc(collection(db, "products"), {
+                    name: name,
+                    description: desc,
+                    price: price,
+                    createdAt: serverTimestamp(),
+                    userEmail: currentUser.email
+                });
+                alert("제품이 등록되었습니다.");
+                document.getElementById('product-form').reset();
+                loadProducts();
+            } catch (error) {
+                console.error("제품 등록 오류:", error);
+            }
+        };
+
+        // 제품 목록 불러오기
+        async function loadProducts() {
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = "";
+
+            try {
+                const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
+                const querySnapshot = await getDocs(q);
+
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    
+                    let deleteBtn = '';
+                    if (currentUser && currentUser.email === ADMIN_EMAIL) {
+                        deleteBtn = `<button class="btn-delete" onclick="deleteProduct('${docSnap.id}')">삭제 (관리자)</button>`;
+                    }
+
+                    card.innerHTML = `
+                        <div class="icon-box">🥛</div>
+                        <h3>${data.name}</h3>
+                        <p><strong>가격:</strong> ${data.price}원</p>
+                        <p>${data.description}</p>
+                        ${deleteBtn}
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (error) {
+                console.error("목록 불러오기 오류:", error);
+            }
+        }
+
+        // 제품 삭제 (관리자 전용)
+        window.deleteProduct = async (id) => {
+            if (currentUser && currentUser.email === ADMIN_EMAIL) {
+                if (confirm("정말 이 제품을 삭제하시겠습니까?")) {
+                    await deleteDoc(doc(db, "products", id));
+                    alert("삭제되었습니다.");
+                    loadProducts();
+                }
+            } else {
+                alert("관리자 권한이 없습니다.");
+            }
+        };
+    </script>
+
     <style>
         :root {
-            --primary: #2B5B84;       /* 신선한 딥 파스텔 블루 */
-            --secondary: #EBF4F6;     /* 밀크 부드러운 배경색 */
-            --accent: #68A0A6;        /* 포인트 그린/블루 */
+            --primary: #2B5B84;
+            --secondary: #EBF4F6;
+            --accent: #68A0A6;
             --text-main: #2C3E50;
             --text-sub: #667085;
-            --bg-cream: #FDFBF7;     /* 따뜻한 유제품 느낌의 크림색 */
+            --bg-cream: #FDFBF7;
         }
 
         * {
@@ -29,7 +158,7 @@
             word-break: keep-all;
         }
 
-        /* Navigation */
+        /* Header Navigation */
         header {
             position: sticky;
             top: 0;
@@ -59,17 +188,38 @@
             font-weight: 500;
         }
 
+        nav {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
         nav a {
-            margin-left: 28px;
             text-decoration: none;
             color: var(--text-main);
             font-weight: 500;
             font-size: 0.95rem;
-            transition: color 0.2s;
         }
 
-        nav a:hover {
-            color: var(--primary);
+        .auth-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-auth {
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .user-info {
+            font-size: 0.85rem;
+            color: var(--text-sub);
         }
 
         /* Hero Section */
@@ -80,248 +230,188 @@
             border-radius: 0 0 40px 40px;
         }
 
-        .hero .badge {
-            display: inline-block;
-            padding: 6px 16px;
-            background-color: #FFFFFF;
-            border: 1px solid #D1E5E7;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            color: var(--primary);
-            font-weight: 600;
-            margin-bottom: 20px;
-        }
-
         .hero h1 {
             font-size: 2.5rem;
             font-weight: 700;
             color: var(--primary);
             margin-bottom: 16px;
-            letter-spacing: -0.5px;
         }
 
-        .hero p {
-            font-size: 1.1rem;
-            color: var(--text-sub);
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        /* Section Layout */
         .container {
             max-width: 1100px;
             margin: 0 auto;
-            padding: 80px 20px;
+            padding: 60px 20px;
         }
 
         .section-title {
             text-align: center;
-            margin-bottom: 50px;
+            margin-bottom: 40px;
         }
 
         .section-title h2 {
             font-size: 1.8rem;
             color: var(--primary);
-            font-weight: 700;
         }
 
-        .section-title p {
-            font-size: 0.95rem;
-            color: var(--text-sub);
-            margin-top: 6px;
+        /* Forms */
+        .form-card {
+            background: #fff;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 40px;
         }
 
-        /* Cards & Grids */
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .btn-submit {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* Cards & Grid */
         .grid-3 {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 24px;
         }
 
         .card {
             background: #FFFFFF;
-            padding: 36px 28px;
+            padding: 30px 24px;
             border-radius: 20px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.03);
             border: 1px solid #F0F0F0;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
         }
 
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.06);
-        }
-
-        .card .icon-box {
-            width: 48px;
-            height: 48px;
-            background: var(--secondary);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.3rem;
-            margin-bottom: 20px;
-            color: var(--primary);
-        }
-
-        .card h3 {
-            font-size: 1.2rem;
+        .icon-box {
+            font-size: 2rem;
             margin-bottom: 10px;
-            color: var(--primary);
         }
 
-        .card p {
-            font-size: 0.95rem;
-            color: var(--text-sub);
-        }
-
-        /* Organization Badges */
-        .dept-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            justify-content: center;
-            margin-top: 20px;
-        }
-
-        .dept-item {
-            background: #FFFFFF;
-            border: 1px solid #E2E8F0;
-            padding: 12px 24px;
-            border-radius: 30px;
-            font-weight: 500;
-            color: var(--text-main);
-            font-size: 0.95rem;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
-        }
-
-        .dept-item.core {
-            background: var(--primary);
-            color: #FFFFFF;
-            border-color: var(--primary);
+        .btn-delete {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            font-size: 0.8rem;
         }
 
         /* Footer */
         footer {
             background: #24292E;
             color: #9AA0A6;
-            padding: 60px 8% 40px;
+            padding: 40px 8%;
             font-size: 0.88rem;
-        }
-
-        .footer-content {
-            max-width: 1100px;
-            margin: 0 auto;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            gap: 30px;
-            border-bottom: 1px solid #3A3F44;
-            padding-bottom: 40px;
-        }
-
-        .footer-brand h3 {
-            color: #FFFFFF;
-            font-size: 1.2rem;
-            margin-bottom: 10px;
-        }
-
-        .footer-details p {
-            margin-bottom: 6px;
-        }
-
-        .copyright {
-            max-width: 1100px;
-            margin: 30px auto 0;
             text-align: center;
-            font-size: 0.8rem;
-            color: #6C7278;
         }
     </style>
 </head>
 <body>
 
-    <!-- Header Navigation -->
     <header>
         <a href="#" class="logo">
             (주)성화태크 <span>SUNGHWA TECH</span>
         </a>
         <nav>
             <a href="#about">기업소개</a>
-            <a href="#organization">조직안내</a>
-            <a href="#location">오시는 길</a>
+            <a href="#products">제품안내</a>
+            <div class="auth-container">
+                <span id="user-display" class="user-info"></span>
+                <button id="auth-btn" class="btn-auth" onclick="toggleAuth()">Google 로그인</button>
+            </div>
         </nav>
     </header>
 
-    <!-- Hero Section -->
     <section class="hero">
-        <span class="badge">Pure & Technical Standard</span>
         <h1>신선함과 기술을 잇는 가치</h1>
-        <p>체계적인 생산·유통 시스템과 끊임없는 경영 혁신으로<br>더 신뢰받는 미래를 만들어갑니다.</p>
+        <p>체계적인 생산·유통 시스템으로 더 신뢰받는 미래를 만들어갑니다.</p>
     </section>
 
-    <!-- Company Overview -->
+    <!-- 기업 소개 -->
     <main class="container" id="about">
         <div class="section-title">
             <h2>기업 개요</h2>
-            <p>투명한 경영과 전문성을 바탕으로 성장하는 성화태크입니다.</p>
         </div>
-
         <div class="grid-3">
             <div class="card">
-                <div class="icon-box">🏢</div>
                 <h3>기업명</h3>
-                <p><strong>(주)성화태크</strong>[cite: 1]<br>대표자: 안동혁[cite: 1]</p>
+                <p><strong>(주)성화태크</strong><br>대표자: 안동혁</p>
             </div>
             <div class="card">
-                <div class="icon-box">🌱</div>
                 <h3>설립 및 업력</h3>
-                <p><strong>2024년 설립</strong> (업력 2년차)[cite: 1]<br>지속 가능한 가치 창출 도모</p>
+                <p><strong>2024년 설립</strong> (업력 2년차)</p>
             </div>
             <div class="card">
-                <div class="icon-box">👥</div>
                 <h3>임직원 현황</h3>
-                <p><strong>총 13명</strong>의 분야별 전문 인력 보유[cite: 1]<br>탄탄한 부서별 협업 체계 구축</p>
+                <p><strong>총 13명</strong>의 전문 인력 보유</p>
             </div>
         </div>
     </main>
 
-    <!-- Organization Section -->
-    <section style="background-color: var(--secondary);" id="organization">
+    <!-- 제품 목록 및 등록 영역 -->
+    <section style="background-color: var(--secondary);" id="products">
         <div class="container">
             <div class="section-title">
-                <h2>조직 구성</h2>
-                <p>각 분야의 전문 부서와 팀이 긴밀히 협력하고 있습니다.</p>
+                <h2>제품 안내</h2>
+                <p>방문자 등록 제품 및 대표 우유 유통 라인업</p>
             </div>
 
-            <div class="dept-list">
-                <div class="dept-item core">영업·마케팅부[cite: 1]</div>
-                <div class="dept-item core">기획·전략부[cite: 1]</div>
-                <div class="dept-item core">생산·유통부[cite: 1]</div>
-                <div class="dept-item">경영·지원부[cite: 1]</div>
-                <div class="dept-item">복리후생지원부[cite: 1]</div>
-                <div class="dept-item">감사팀[cite: 1]</div>
-                <div class="dept-item">인사팀[cite: 1]</div>
+            <!-- 로그인 사용자 전용 등록 폼 -->
+            <div id="product-form-container" class="form-card" style="display: none;">
+                <h3>신규 제품 직접 등록하기</h3>
+                <form id="product-form" onsubmit="addProduct(event)">
+                    <div class="form-group">
+                        <label>제품명</label>
+                        <input type="text" id="product-name" required placeholder="예: 신선한 성화 유기농 우유">
+                    </div>
+                    <div class="form-group">
+                        <label>가격 (원)</label>
+                        <input type="number" id="product-price" required placeholder="3500">
+                    </div>
+                    <div class="form-group">
+                        <label>설명</label>
+                        <textarea id="product-desc" rows="3" required placeholder="제품에 대한 설명을 입력해 주세요."></textarea>
+                    </div>
+                    <button type="submit" class="btn-submit">제품 등록하기</button>
+                </form>
+            </div>
+
+            <!-- 동적 제품 목록 카드 출력 영역 -->
+            <div id="product-grid" class="grid-3">
+                <!-- 자바스크립트에 의해 제품 카드가 불러와집니다 -->
             </div>
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer id="location">
-        <div class="footer-content">
-            <div class="footer-brand">
-                <h3>(주)성화태크</h3>
-                <p>신선함과 기술이 조화를 이루는 기업</p>
-            </div>
-            <div class="footer-details">
-                <p><strong>대표자:</strong> 안동혁[cite: 1] | <strong>사업자등록번호:</strong> 697-48-28200[cite: 1]</p>
-                <p><strong>주소:</strong> 세종특별자치시 우윳군 추출면 신선목장길 69[cite: 1]</p>
-            </div>
-        </div>
-        <div class="copyright">
-            2026 SUNGHWA TECH CO., LTD. All rights reserved.[cite: 1]
-        </div>
+    <footer>
+        <p><strong>(주)성화태크</strong> | 대표자: 안동혁 | 사업자등록번호: 697-48-28200</p>
+        <p>주소: 세종특별자치시 우윳군 추출면 신선목장길 69</p>
+        <p style="margin-top: 10px; font-size: 0.8rem;">© 2026 SUNGHWA TECH CO., LTD. All rights reserved.</p>
     </footer>
 
 </body>
