@@ -6,6 +6,150 @@
     <title>(주)성화태크 | SUNGHWA TECH</title>
     <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
     
+    <!-- Firebase SDK (v10) 모듈 연동 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // 본인의 Firebase 프로젝트 설정값 입력
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
+
+        const ADMIN_EMAIL = "20240153@bangok.hs.kr";
+        let currentUser = null;
+
+        // 인증 상태 감지
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            const authBtn = document.getElementById('auth-btn');
+            const userDisplay = document.getElementById('user-display');
+            const loginNotice = document.getElementById('login-notice');
+            const formContainer = document.getElementById('product-form-container');
+
+            if (user) {
+                authBtn.innerText = "로그아웃";
+                
+                // 관리자 이메일 확인 조건문
+                if (user.email === ADMIN_EMAIL) {
+                    userDisplay.innerText = "👑 관리자";
+                } else {
+                    userDisplay.innerText = `👤 ${user.displayName || '사용자'}`;
+                }
+
+                loginNotice.style.display = "none";
+                formContainer.style.display = "block";
+            } else {
+                authBtn.innerText = "Google 로그인";
+                userDisplay.innerText = "";
+                loginNotice.style.display = "block";
+                formContainer.style.display = "none";
+            }
+            loadProducts();
+        });
+
+        // 원클릭 구글 팝업 로그인 / 로그아웃
+        window.toggleAuth = () => {
+            if (currentUser) {
+                signOut(auth).then(() => alert("로그아웃 되었습니다."));
+            } else {
+                signInWithPopup(auth, provider).catch((error) => {
+                    console.error("구글 로그인 실패:", error);
+                    alert("로그인 과정에서 오류가 발생했습니다.");
+                });
+            }
+        };
+
+        // 제품 직접 등록
+        window.addProduct = async (e) => {
+            e.preventDefault();
+            if (!currentUser) return;
+
+            const name = document.getElementById('product-name').value;
+            const price = document.getElementById('product-price').value;
+            const desc = document.getElementById('product-desc').value;
+
+            // 작성자 표시는 관리자일 경우 '관리자', 아니면 구글 계정 닉네임 사용
+            const authorDisplayName = (currentUser.email === ADMIN_EMAIL) ? "관리자" : (currentUser.displayName || "사용자");
+
+            try {
+                await addDoc(collection(db, "products"), {
+                    name: name,
+                    price: Number(price),
+                    desc: desc,
+                    authorName: authorDisplayName,
+                    authorEmail: currentUser.email,
+                    createdAt: serverTimestamp()
+                });
+                alert("제품이 성공적으로 추가되었습니다.");
+                document.getElementById('product-form').reset();
+                loadProducts();
+            } catch (error) {
+                console.error("제품 등록 오류:", error);
+            }
+        };
+
+        // 제품 목록 동적 불러오기
+        async function loadProducts() {
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = "";
+
+            try {
+                const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    grid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: #888;">등록된 제품이 없습니다.</p>`;
+                    return;
+                }
+
+                querySnapshot.forEach((docSnap) => {
+                    const p = docSnap.data();
+                    const card = document.createElement('div');
+                    card.className = 'card';
+
+                    let deleteBtn = '';
+                    if (currentUser && currentUser.email === ADMIN_EMAIL) {
+                        deleteBtn = `<button class="btn-delete" onclick="deleteProduct('${docSnap.id}')">삭제 (관리자)</button>`;
+                    }
+
+                    card.innerHTML = `
+                        <h3>${p.name}</h3>
+                        <p style="color: var(--primary); font-weight: bold; margin: 4px 0;">${Number(p.price).toLocaleString()}원</p>
+                        <p style="font-size: 0.9rem; color: #555;">${p.desc}</p>
+                        <span class="card-author">✍️ 작성자: ${p.authorName}</span>
+                        ${deleteBtn}
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (error) {
+                console.error("목록 로드 오류:", error);
+            }
+        }
+
+        // 제품 삭제 (관리자 전용)
+        window.deleteProduct = async (id) => {
+            if (currentUser && currentUser.email === ADMIN_EMAIL) {
+                if (confirm("정말 이 제품을 삭제하시겠습니까?")) {
+                    await deleteDoc(doc(db, "products", id));
+                    alert("삭제되었습니다.");
+                    loadProducts();
+                }
+            }
+        };
+    </script>
+
     <style>
         :root {
             --primary: #2B5B84;
@@ -75,7 +219,7 @@
         .auth-container {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
 
         .btn-auth {
@@ -89,9 +233,9 @@
         }
 
         .user-info {
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             color: var(--primary);
-            font-weight: bold;
+            font-weight: 700;
         }
 
         .hero {
@@ -140,7 +284,6 @@
             font-size: 0.95rem;
         }
 
-        /* 기업 정보 Grid (이미지 디자인 반영) */
         .info-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -184,7 +327,6 @@
             color: var(--text-main);
         }
 
-        /* Login Notice Box */
         .notice-box {
             background: #fff;
             padding: 30px;
@@ -200,7 +342,6 @@
             margin-bottom: 15px;
         }
 
-        /* Form Card */
         .form-card {
             background: #fff;
             padding: 24px;
@@ -237,7 +378,6 @@
             font-weight: bold;
         }
 
-        /* Product Grid */
         .grid-3 {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -308,7 +448,6 @@
         <p>투명하고 명확한 경영으로 신뢰받는 미래를 만들어갑니다.</p>
     </section>
 
-    <!-- 이미지 정보 반영 섹션 -->
     <main class="container" id="about">
         <div class="section-header">
             <span class="sub-title">COMPANY INFORMATION</span>
@@ -362,7 +501,6 @@
         </div>
     </main>
 
-    <!-- 제품 및 작성 기능 섹션 -->
     <section style="background-color: var(--secondary);" id="products">
         <div class="container">
             <div class="section-header" style="text-align: center;">
@@ -370,13 +508,13 @@
                 <p>등록된 제품 목록을 확인하고 직접 등록해 보세요.</p>
             </div>
 
-            <!-- 로그인 안 된 경우 노출 멘트 -->
+            <!-- 미로그인 시 가이드 문구 -->
             <div id="login-notice" class="notice-box">
                 <p>🔒 <strong>제품을 추가하려면 구글 로그인이 필요합니다.</strong></p>
                 <button class="btn-auth" onclick="toggleAuth()">Google 계정으로 로그인하기</button>
             </div>
 
-            <!-- 로그인 성공 시 노출되는 등록 폼 -->
+            <!-- 로그인 시 등록 폼 -->
             <div id="product-form-container" class="form-card" style="display: none;">
                 <h3>신규 제품 등록</h3>
                 <form id="product-form" onsubmit="addProduct(event)">
@@ -396,7 +534,6 @@
                 </form>
             </div>
 
-            <!-- 제품 리스트 영역 -->
             <div id="product-grid" class="grid-3"></div>
         </div>
     </section>
@@ -406,127 +543,5 @@
         <p style="margin-top: 8px; font-size: 0.8rem;">© 2026 SUNGHWA TECH CO., LTD. All rights reserved.</p>
     </footer>
 
-    <script>
-        const ADMIN_EMAIL = "20240153@bangok.hs.kr";
-        let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
-
-        // 초기화
-        document.addEventListener('DOMContentLoaded', () => {
-            updateAuthUI();
-            loadProducts();
-        });
-
-        // 모의 로그인/로그아웃 처리 (구글 로그인이 브라우저에서 바로 동작하도록 설정)
-        function toggleAuth() {
-            if (currentUser) {
-                currentUser = null;
-                localStorage.removeItem('currentUser');
-                alert("로그아웃 되었습니다.");
-            } else {
-                const email = prompt("구글 계정 이메일을 입력해 주세요:", "20240153@bangok.hs.kr");
-                if (!email) return;
-                
-                const nickname = prompt("사용할 닉네임을 입력해 주세요:", email.split('@')[0]);
-                if (!nickname) return;
-
-                currentUser = { email: email, name: nickname };
-                localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                alert(`${nickname}님 환영합니다! (Google 로그인 완료)`);
-            }
-            updateAuthUI();
-            loadProducts();
-        }
-
-        // 로그인 상태에 따른 UI 변경
-        function updateAuthUI() {
-            const authBtn = document.getElementById('auth-btn');
-            const userDisplay = document.getElementById('user-display');
-            const noticeBox = document.getElementById('login-notice');
-            const formContainer = document.getElementById('product-form-container');
-
-            if (currentUser) {
-                authBtn.innerText = "로그아웃";
-                userDisplay.innerText = `👤 ${currentUser.name} (${currentUser.email})`;
-                noticeBox.style.display = "none";
-                formContainer.style.display = "block";
-            } else {
-                authBtn.innerText = "Google 로그인";
-                userDisplay.innerText = "";
-                noticeBox.style.display = "block";
-                formContainer.style.display = "none";
-            }
-        }
-
-        // 제품 등록
-        function addProduct(e) {
-            e.preventDefault();
-            if (!currentUser) return;
-
-            const name = document.getElementById('product-name').value;
-            const price = document.getElementById('product-price').value;
-            const desc = document.getElementById('product-desc').value;
-
-            const products = JSON.parse(localStorage.getItem('products')) || [];
-            
-            const newProduct = {
-                id: Date.now(),
-                name: name,
-                price: price,
-                desc: desc,
-                authorName: currentUser.name,
-                authorEmail: currentUser.email
-            };
-
-            products.unshift(newProduct);
-            localStorage.setItem('products', JSON.stringify(products));
-
-            document.getElementById('product-form').reset();
-            alert("제품이 등록되었습니다.");
-            loadProducts();
-        }
-
-        // 제품 목록 출력
-        function loadProducts() {
-            const grid = document.getElementById('product-grid');
-            grid.innerHTML = "";
-            const products = JSON.parse(localStorage.getItem('products')) || [];
-
-            if (products.length === 0) {
-                grid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: #888;">등록된 제품이 없습니다.</p>`;
-                return;
-            }
-
-            products.forEach(p => {
-                const card = document.createElement('div');
-                card.className = 'card';
-
-                let deleteBtn = '';
-                if (currentUser && currentUser.email === ADMIN_EMAIL) {
-                    deleteBtn = `<button class="btn-delete" onclick="deleteProduct(${p.id})">삭제 (관리자)</button>`;
-                }
-
-                card.innerHTML = `
-                    <h3>${p.name}</h3>
-                    <p style="color: var(--primary); font-weight: bold; margin: 4px 0;">${Number(p.price).toLocaleString()}원</p>
-                    <p style="font-size: 0.9rem; color: #555;">${p.desc}</p>
-                    <span class="card-author"> 작성자: ${p.authorName}</span>
-                    ${deleteBtn}
-                `;
-                grid.appendChild(card);
-            });
-        }
-
-        // 관리자 전용 삭제 기능
-        function deleteProduct(id) {
-            if (currentUser && currentUser.email === ADMIN_EMAIL) {
-                if (confirm("정말 이 제품을 삭제하시겠습니까?")) {
-                    let products = JSON.parse(localStorage.getItem('products')) || [];
-                    products = products.filter(p => p.id !== id);
-                    localStorage.setItem('products', JSON.stringify(products));
-                    loadProducts();
-                }
-            }
-        }
-    </script>
 </body>
 </html>
