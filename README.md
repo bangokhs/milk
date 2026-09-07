@@ -6,150 +6,6 @@
     <title>(주)성화태크 | SUNGHWA TECH</title>
     <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
     
-    <!-- Firebase SDK (v10) 모듈 연동 -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-        // 본인의 Firebase 프로젝트 설정값 입력
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const provider = new GoogleAuthProvider();
-
-        const ADMIN_EMAIL = "20240153@bangok.hs.kr";
-        let currentUser = null;
-
-        // 인증 상태 감지
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            const authBtn = document.getElementById('auth-btn');
-            const userDisplay = document.getElementById('user-display');
-            const loginNotice = document.getElementById('login-notice');
-            const formContainer = document.getElementById('product-form-container');
-
-            if (user) {
-                authBtn.innerText = "로그아웃";
-                
-                // 관리자 이메일 확인 조건문
-                if (user.email === ADMIN_EMAIL) {
-                    userDisplay.innerText = "👑 관리자";
-                } else {
-                    userDisplay.innerText = `👤 ${user.displayName || '사용자'}`;
-                }
-
-                loginNotice.style.display = "none";
-                formContainer.style.display = "block";
-            } else {
-                authBtn.innerText = "Google 로그인";
-                userDisplay.innerText = "";
-                loginNotice.style.display = "block";
-                formContainer.style.display = "none";
-            }
-            loadProducts();
-        });
-
-        // 원클릭 구글 팝업 로그인 / 로그아웃
-        window.toggleAuth = () => {
-            if (currentUser) {
-                signOut(auth).then(() => alert("로그아웃 되었습니다."));
-            } else {
-                signInWithPopup(auth, provider).catch((error) => {
-                    console.error("구글 로그인 실패:", error);
-                    alert("로그인 과정에서 오류가 발생했습니다.");
-                });
-            }
-        };
-
-        // 제품 직접 등록
-        window.addProduct = async (e) => {
-            e.preventDefault();
-            if (!currentUser) return;
-
-            const name = document.getElementById('product-name').value;
-            const price = document.getElementById('product-price').value;
-            const desc = document.getElementById('product-desc').value;
-
-            // 작성자 표시는 관리자일 경우 '관리자', 아니면 구글 계정 닉네임 사용
-            const authorDisplayName = (currentUser.email === ADMIN_EMAIL) ? "관리자" : (currentUser.displayName || "사용자");
-
-            try {
-                await addDoc(collection(db, "products"), {
-                    name: name,
-                    price: Number(price),
-                    desc: desc,
-                    authorName: authorDisplayName,
-                    authorEmail: currentUser.email,
-                    createdAt: serverTimestamp()
-                });
-                alert("제품이 성공적으로 추가되었습니다.");
-                document.getElementById('product-form').reset();
-                loadProducts();
-            } catch (error) {
-                console.error("제품 등록 오류:", error);
-            }
-        };
-
-        // 제품 목록 동적 불러오기
-        async function loadProducts() {
-            const grid = document.getElementById('product-grid');
-            grid.innerHTML = "";
-
-            try {
-                const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
-                const querySnapshot = await getDocs(q);
-
-                if (querySnapshot.empty) {
-                    grid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: #888;">등록된 제품이 없습니다.</p>`;
-                    return;
-                }
-
-                querySnapshot.forEach((docSnap) => {
-                    const p = docSnap.data();
-                    const card = document.createElement('div');
-                    card.className = 'card';
-
-                    let deleteBtn = '';
-                    if (currentUser && currentUser.email === ADMIN_EMAIL) {
-                        deleteBtn = `<button class="btn-delete" onclick="deleteProduct('${docSnap.id}')">삭제 (관리자)</button>`;
-                    }
-
-                    card.innerHTML = `
-                        <h3>${p.name}</h3>
-                        <p style="color: var(--primary); font-weight: bold; margin: 4px 0;">${Number(p.price).toLocaleString()}원</p>
-                        <p style="font-size: 0.9rem; color: #555;">${p.desc}</p>
-                        <span class="card-author">✍️ 작성자: ${p.authorName}</span>
-                        ${deleteBtn}
-                    `;
-                    grid.appendChild(card);
-                });
-            } catch (error) {
-                console.error("목록 로드 오류:", error);
-            }
-        }
-
-        // 제품 삭제 (관리자 전용)
-        window.deleteProduct = async (id) => {
-            if (currentUser && currentUser.email === ADMIN_EMAIL) {
-                if (confirm("정말 이 제품을 삭제하시겠습니까?")) {
-                    await deleteDoc(doc(db, "products", id));
-                    alert("삭제되었습니다.");
-                    loadProducts();
-                }
-            }
-        };
-    </script>
-
     <style>
         :root {
             --primary: #2B5B84;
@@ -174,6 +30,7 @@
             word-break: keep-all;
         }
 
+        /* Header Navigation */
         header {
             position: sticky;
             top: 0;
@@ -214,30 +71,14 @@
             color: var(--text-main);
             font-weight: 500;
             font-size: 0.95rem;
+            transition: color 0.2s ease;
         }
 
-        .auth-container {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .btn-auth {
-            background: var(--primary);
-            color: #fff;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-
-        .user-info {
-            font-size: 0.9rem;
+        nav a:hover {
             color: var(--primary);
-            font-weight: 700;
         }
 
+        /* Hero Section */
         .hero {
             padding: 80px 8% 60px;
             text-align: center;
@@ -284,6 +125,7 @@
             font-size: 0.95rem;
         }
 
+        /* 기업 정보 그리드 */
         .info-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -327,57 +169,71 @@
             color: var(--text-main);
         }
 
-        .notice-box {
-            background: #fff;
-            padding: 30px;
-            border-radius: 16px;
-            text-align: center;
-            border: 2px dashed #CBD5E1;
-            margin-bottom: 30px;
-        }
-
-        .notice-box p {
-            color: var(--text-sub);
-            font-size: 1rem;
-            margin-bottom: 15px;
-        }
-
+        /* 등록 폼 카드 */
         .form-card {
             background: #fff;
-            padding: 24px;
+            padding: 28px;
             border-radius: 16px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+            margin-bottom: 40px;
+            border: 1px solid #E2E8F0;
+        }
+
+        .form-card h3 {
+            font-size: 1.2rem;
+            color: var(--primary);
+            margin-bottom: 18px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
         }
 
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 16px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 6px;
             font-weight: 600;
             font-size: 0.9rem;
+            color: var(--text-main);
         }
 
         .form-group input, .form-group textarea {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
+            padding: 11px 14px;
+            border: 1px solid #CBD5E1;
             border-radius: 8px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus, .form-group textarea:focus {
+            border-color: var(--primary);
         }
 
         .btn-submit {
-            background: var(--accent);
+            background: var(--primary);
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 12px 24px;
             border-radius: 8px;
             cursor: pointer;
             font-weight: bold;
+            font-size: 0.95rem;
+            transition: background 0.2s ease;
         }
 
+        .btn-submit:hover {
+            background: #1d4263;
+        }
+
+        /* 제품 카드 그리드 */
         .grid-3 {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -390,26 +246,57 @@
             border-radius: 16px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.03);
             border: 1px solid #F0F0F0;
-            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .card-body h3 {
+            font-size: 1.15rem;
+            color: var(--primary);
+        }
+
+        .card-price {
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin: 6px 0;
+        }
+
+        .card-desc {
+            font-size: 0.92rem;
+            color: #555;
+            margin-bottom: 12px;
+        }
+
+        .card-footer {
+            border-top: 1px solid #F0F0F0;
+            padding-top: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .card-author {
-            font-size: 0.8rem;
-            color: var(--accent);
+            font-size: 0.82rem;
+            color: var(--text-sub);
             font-weight: 600;
-            margin-top: 10px;
-            display: block;
         }
 
         .btn-delete {
-            background: #e74c3c;
+            background: #EF4444;
             color: white;
             border: none;
             padding: 6px 12px;
             border-radius: 6px;
             cursor: pointer;
-            margin-top: 15px;
             font-size: 0.8rem;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .btn-delete:hover {
+            background: #DC2626;
         }
 
         footer {
@@ -429,6 +316,7 @@
 </head>
 <body>
 
+    <!-- Header Navigation -->
     <header>
         <a href="#" class="logo">
             (주)성화태크 <span>SUNGHWA TECH</span>
@@ -436,18 +324,16 @@
         <nav>
             <a href="#about">기업정보</a>
             <a href="#products">제품안내</a>
-            <div class="auth-container">
-                <span id="user-display" class="user-info"></span>
-                <button id="auth-btn" class="btn-auth" onclick="toggleAuth()">Google 로그인</button>
-            </div>
         </nav>
     </header>
 
+    <!-- Hero Visual -->
     <section class="hero">
         <h1>신선함과 기술을 잇는 가치</h1>
         <p>투명하고 명확한 경영으로 신뢰받는 미래를 만들어갑니다.</p>
     </section>
 
+    <!-- 기업 정보 세션 (이미지 레이아웃 준수) -->
     <main class="container" id="about">
         <div class="section-header">
             <span class="sub-title">COMPANY INFORMATION</span>
@@ -501,47 +387,133 @@
         </div>
     </main>
 
+    <!-- 제품 안내 및 직접 추가 영역 -->
     <section style="background-color: var(--secondary);" id="products">
         <div class="container">
             <div class="section-header" style="text-align: center;">
-                <h2>제품 안내</h2>
-                <p>등록된 제품 목록을 확인하고 직접 등록해 보세요.</p>
+                <h2>제품 안내 및 직접 추가</h2>
+                <p>누구나 자유롭게 신규 제품 정보를 등록할 수 있습니다.</p>
             </div>
 
-            <!-- 미로그인 시 가이드 문구 -->
-            <div id="login-notice" class="notice-box">
-                <p>🔒 <strong>제품을 추가하려면 구글 로그인이 필요합니다.</strong></p>
-                <button class="btn-auth" onclick="toggleAuth()">Google 계정으로 로그인하기</button>
-            </div>
-
-            <!-- 로그인 시 등록 폼 -->
-            <div id="product-form-container" class="form-card" style="display: none;">
-                <h3>신규 제품 등록</h3>
+            <!-- 신규 제품 등록 입력 폼 -->
+            <div class="form-card">
+                <h3>📝 제품 직접 등록하기</h3>
                 <form id="product-form" onsubmit="addProduct(event)">
-                    <div class="form-group">
-                        <label>제품명</label>
-                        <input type="text" id="product-name" required placeholder="예: 신선한 성화 목장 우유">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>등록자 이름 (닉네임)</label>
+                            <input type="text" id="author-name" required placeholder="예: 홍길동">
+                        </div>
+                        <div class="form-group">
+                            <label>제품명</label>
+                            <input type="text" id="product-name" required placeholder="예: 신선한 성화 목장 우유">
+                        </div>
+                        <div class="form-group">
+                            <label>가격 (원)</label>
+                            <input type="number" id="product-price" required placeholder="3800">
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label>가격 (원)</label>
-                        <input type="number" id="product-price" required placeholder="3800">
+                        <label>제품 설명</label>
+                        <textarea id="product-desc" rows="3" required placeholder="제품 특성 및 신선도 안내를 적어주세요."></textarea>
                     </div>
-                    <div class="form-group">
-                        <label>설명</label>
-                        <textarea id="product-desc" rows="3" required placeholder="제품에 대한 설명을 입력하세요."></textarea>
-                    </div>
-                    <button type="submit" class="btn-submit">제품 추가하기</button>
+                    <button type="submit" class="btn-submit">제품 등록하기</button>
                 </form>
             </div>
 
+            <!-- 동적 제품 목록 -->
             <div id="product-grid" class="grid-3"></div>
         </div>
     </section>
 
+    <!-- Footer -->
     <footer>
         <p><strong>(주)성화태크</strong> | 대표자: 성화택 | 사업자 주소: 세종특별자치시 우윳군 추출면 신선목장길 69</p>
         <p style="margin-top: 8px; font-size: 0.8rem;">© 2026 SUNGHWA TECH CO., LTD. All rights reserved.</p>
     </footer>
 
+    <!-- 자바스크립트 로직 (Local Storage 및 관리자 삭제) -->
+    <script>
+        const ADMIN_CODE = "1133";
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProducts();
+        });
+
+        // 제품 등록 함수
+        function addProduct(e) {
+            e.preventDefault();
+
+            const authorName = document.getElementById('author-name').value.trim();
+            const productName = document.getElementById('product-name').value.trim();
+            const productPrice = document.getElementById('product-price').value.trim();
+            const productDesc = document.getElementById('product-desc').value.trim();
+
+            const products = JSON.parse(localStorage.getItem('products')) || [];
+
+            const newProduct = {
+                id: Date.now(),
+                author: authorName,
+                name: productName,
+                price: productPrice,
+                desc: productDesc
+            };
+
+            products.unshift(newProduct);
+            localStorage.setItem('products', JSON.stringify(products));
+
+            // 폼 초기화
+            document.getElementById('product-form').reset();
+            alert("제품이 정상적으로 등록되었습니다!");
+            loadProducts();
+        }
+
+        // 제품 불러오기 함수
+        function loadProducts() {
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = "";
+            const products = JSON.parse(localStorage.getItem('products')) || [];
+
+            if (products.length === 0) {
+                grid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: #888; padding: 40px 0;">등록된 제품이 없습니다. 위 폼에서 직접 등록해보세요!</p>`;
+                return;
+            }
+
+            products.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'card';
+
+                card.innerHTML = `
+                    <div class="card-body">
+                        <h3>${p.name}</h3>
+                        <p class="card-price">${Number(p.price).toLocaleString()}원</p>
+                        <p class="card-desc">${p.desc}</p>
+                    </div>
+                    <div class="card-footer">
+                        <span class="card-author">✍️ 등록자: ${p.author}</span>
+                        <button class="btn-delete" onclick="deleteProduct(${p.id})">삭제</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // 삭제 처리 함수 (관리자 코드 확인)
+        function deleteProduct(id) {
+            const inputCode = prompt("제품을 삭제하려면 관리자 코드를 입력하세요:");
+            
+            if (inputCode === null) return; // 취소 클릭시 아무 작업 안 함
+
+            if (inputCode === ADMIN_CODE) {
+                let products = JSON.parse(localStorage.getItem('products')) || [];
+                products = products.filter(p => p.id !== id);
+                localStorage.setItem('products', JSON.stringify(products));
+                alert("성공적으로 삭제되었습니다.");
+                loadProducts();
+            } else {
+                alert("관리자 코드가 일치하지 않습니다.");
+            }
+        }
+    </script>
 </body>
 </html>
